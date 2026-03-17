@@ -10,6 +10,9 @@ public sealed class CustomTitleBar : Panel
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool HasMaximize { get; set; } = true;
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowSettings { get; set; } = true;
+
     private readonly Form _owner;
     private Point _dragOffset;
     private bool _dragging;
@@ -56,7 +59,10 @@ public sealed class CustomTitleBar : Panel
         x -= ButtonWidth; _rcMaximize = HasMaximize ? new Rectangle(x, 0, ButtonWidth, BarHeight) : Rectangle.Empty;
         if (!HasMaximize) x += ButtonWidth; // don't advance if no maximize slot
         x -= ButtonWidth; _rcMinimize = new Rectangle(x, 0, ButtonWidth, BarHeight);
-        x -= ButtonWidth; _rcSettings = new Rectangle(x, 0, ButtonWidth, BarHeight);
+        if (ShowSettings)
+        { x -= ButtonWidth; _rcSettings = new Rectangle(x, 0, ButtonWidth, BarHeight); }
+        else
+        { _rcSettings = Rectangle.Empty; }
     }
 
     private void OnPaint(object? sender, PaintEventArgs e)
@@ -72,7 +78,8 @@ public sealed class CustomTitleBar : Panel
         using (var brush = new SolidBrush(CyberpunkTheme.NeonCyan))
         using (var font = new Font("Consolas", 9f, FontStyle.Bold))
         {
-            var textRect = new RectangleF(8, 0, _rcSettings.X - 8, BarHeight);
+            int textRight = ShowSettings ? _rcSettings.X : _rcMinimize.X;
+            var textRect = new RectangleF(8, 0, textRight - 8, BarHeight);
             var sf = new StringFormat
             {
                 Alignment = StringAlignment.Near,

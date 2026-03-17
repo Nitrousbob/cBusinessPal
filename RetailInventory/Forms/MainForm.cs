@@ -15,7 +15,7 @@ public class MainForm : Form
     private Panel _glowBar = new();
     private Panel _statusBar = new();
     private CustomTitleBar? _titleBar;
-    private Button _btnSettings = new();
+    private Button _btnHamburger = new();
 
     public MainForm()
     {
@@ -23,8 +23,6 @@ public class MainForm : Form
         RefreshStats();
         if (AppSettingsService.Instance.Current.BorderlessMode)
             AttachCustomTitleBar();
-        else
-            ShowStandardModeSettingsButton();
         var ticker = new System.Windows.Forms.Timer { Interval = 2000 };
         ticker.Tick += (_, _) => AnimateGlow();
         ticker.Start();
@@ -53,6 +51,16 @@ public class MainForm : Form
         // Header
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(12, 12, 28) };
         header.Paint += DrawHeader;
+
+        // Hamburger button — permanent, top-right of header, consistent in both modes
+        _btnHamburger.Text = "≡";
+        _btnHamburger.Size = new Size(32, 32);
+        _btnHamburger.Cursor = Cursors.Hand;
+        CyberpunkTheme.StyleButton(_btnHamburger, CyberpunkTheme.NeonYellow);
+        _btnHamburger.Click += OnHamburgerClick;
+        header.Resize += (_, _) => _btnHamburger.Location = new Point(header.Width - _btnHamburger.Width, 0);
+        header.Controls.Add(_btnHamburger);
+
         root.Controls.Add(header, 0, 0);
 
         // Neon glow bar
@@ -105,8 +113,8 @@ public class MainForm : Form
             CyberpunkTheme.NeonCyan, OnProducts), 0, 0);
         navPanel.Controls.Add(CreateNavButton("[ CATEGORIES ]", "Organize products into categories",
             CyberpunkTheme.NeonMagenta, OnCategories), 1, 0);
-        navPanel.Controls.Add(CreateNavButton("[ STOCK ADJUSTMENT ]", "Record receipts, sales, returns, and adjustments",
-            CyberpunkTheme.NeonOrange, OnStock), 0, 1);
+        navPanel.Controls.Add(CreateNavButton("[ SALE MANAGER ]", "Set sale prices and discounts by category or individual item",
+            CyberpunkTheme.NeonOrange, OnSaleManager), 0, 1);
         navPanel.Controls.Add(CreateNavButton("[ TRANSACTION LOG ]", "Full history of all stock movements",
             CyberpunkTheme.NeonYellow, OnHistory), 1, 1);
 
@@ -292,13 +300,10 @@ public class MainForm : Form
         RefreshStats();
     }
 
-    private void OnStock(object? sender, EventArgs e)
+    private void OnSaleManager(object? sender, EventArgs e)
     {
-        // Quick stock adjustment — pick a product first
-        using var picker = new ProductListForm(_svc);
-        picker.Text = "> SELECT PRODUCT FOR STOCK ADJUSTMENT";
-        picker.ShowDialog(this);
-        RefreshStats();
+        using var form = new SaleManagerForm(_svc);
+        form.ShowDialog(this);
     }
 
     private void OnHistory(object? sender, EventArgs e)
@@ -318,22 +323,7 @@ public class MainForm : Form
     {
         // Pass empty title — DrawHeader already paints the large title; no duplication needed
         _titleBar = CyberpunkTheme.ApplyBorderlessMode(this, "");
-        _titleBar.SettingsClicked += (_, e) => ShowHamburgerMenu(_titleBar, e);
-        _btnSettings.Visible = false;
-    }
-
-    private void ShowStandardModeSettingsButton()
-    {
-        _btnSettings.Text = "\u2261"; // ≡ hamburger
-        _btnSettings.Size = new Size(28, 20);
-        _btnSettings.Anchor = AnchorStyles.Right | AnchorStyles.Top;
-        CyberpunkTheme.StyleButton(_btnSettings, CyberpunkTheme.NeonYellow);
-        _btnSettings.Click -= OnHamburgerClick;
-        _btnSettings.Click += OnHamburgerClick;
-        if (!_statusBar.Controls.Contains(_btnSettings))
-            _statusBar.Controls.Add(_btnSettings);
-        _btnSettings.Location = new Point(_statusBar.Width - 32, 4);
-        _btnSettings.Visible = true;
+        _titleBar.ShowSettings = false; // hamburger lives in the header now
     }
 
     private void OnHamburgerClick(object? sender, EventArgs e) =>
@@ -369,8 +359,17 @@ public class MainForm : Form
         };
         itemToggle.Click += OnToggleBorderless;
 
+        var itemTax = new ToolStripMenuItem("[ TAX SETTINGS ]") { ForeColor = CyberpunkTheme.NeonMagenta };
+        itemTax.Click += (_, _) =>
+        {
+            using var dlg = new TaxSettingsDialog();
+            dlg.ShowDialog(this);
+        };
+
         menu.Items.Add(itemSave);
         menu.Items.Add(itemLoad);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(itemTax);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(itemToggle);
 
@@ -397,7 +396,6 @@ public class MainForm : Form
                 CyberpunkTheme.RemoveBorderlessMode(this, _titleBar, FormBorderStyle.Sizable);
                 _titleBar = null;
             }
-            ShowStandardModeSettingsButton();
         }
     }
 }

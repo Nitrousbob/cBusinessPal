@@ -8,7 +8,10 @@
       "mcp__jcodemunch__get_file_tree",
       "mcp__jcodemunch__get_repo_outline",
       "mcp__jcodemunch__get_context_bundle",
-      "mcp__jcodemunch__get_file_content"
+      "mcp__jcodemunch__get_file_content",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build /home/bearf/winformsAi-jcodemunch/RetailInventory.slnx 2>&1 | tail -20)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build RetailInventory.slnx 2>&1 | tail -20)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build RetailInventory.slnx 2>&1 | tail -30)"
     ]
   }
 }

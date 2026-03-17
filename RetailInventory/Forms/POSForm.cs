@@ -15,6 +15,7 @@ public class POSForm : Form
     private DataGridView _dgvProducts = new();
     private DataGridView _dgvCart = new();
     private Label _lblSubtotal = new();
+    private Label _lblTax = new();
     private Label _lblTotal = new();
     private Label _lblChange = new();
     private TextBox _txtDiscount = new();
@@ -27,8 +28,11 @@ public class POSForm : Form
     {
         public Product Product { get; }
         public int Qty { get; set; }
-        public decimal UnitPrice { get; }
-        public CartLine(Product p, int qty, decimal price) => (Product, Qty, UnitPrice) = (p, qty, price);
+        public decimal UnitPrice { get; }       // effective price (sale price when applicable)
+        public decimal OriginalPrice { get; }   // regular list price
+        public bool IsOnSale => UnitPrice != OriginalPrice;
+        public CartLine(Product p, int qty, decimal price, decimal originalPrice)
+            => (Product, Qty, UnitPrice, OriginalPrice) = (p, qty, price, originalPrice);
         public decimal LineTotal => Qty * UnitPrice;
     }
 
@@ -165,7 +169,7 @@ public class POSForm : Form
         };
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 134));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 162));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
 
         panel.Controls.Add(
@@ -200,7 +204,7 @@ public class POSForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 5,
+            RowCount = 6,
             BackColor = CyberpunkTheme.Surface,
             Padding = new Padding(10, 4, 10, 4)
         };
@@ -210,13 +214,17 @@ public class POSForm : Form
                 60, CyberpunkTheme.NeonYellow.R, CyberpunkTheme.NeonYellow.G, CyberpunkTheme.NeonYellow.B));
             e.Graphics.DrawRectangle(pen, 0, 0, pnl.Width - 1, pnl.Height - 1);
         };
-        pnl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
-        pnl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
-        for (int i = 0; i < 5; i++) pnl.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+        pnl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        pnl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
+        for (int i = 0; i < 6; i++) pnl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 6));
 
         _lblSubtotal.ForeColor = CyberpunkTheme.TextPrimary;
         _lblSubtotal.Font = CyberpunkTheme.FontBody;
         _lblSubtotal.Text = "$0.00";
+
+        _lblTax.ForeColor = CyberpunkTheme.NeonMagenta;
+        _lblTax.Font = CyberpunkTheme.FontBody;
+        _lblTax.Text = "$0.00";
 
         _lblTotal.ForeColor = CyberpunkTheme.NeonCyan;
         _lblTotal.Font = new Font("Consolas", 13f, FontStyle.Bold);
@@ -239,6 +247,7 @@ public class POSForm : Form
         int r = 0;
         AddTotalRow(pnl, "SUBTOTAL:", _lblSubtotal, r++);
         AddTotalInput(pnl, "DISCOUNT %:", _txtDiscount, r++);
+        AddTotalRow(pnl, "TAX:", _lblTax, r++);
         AddTotalRow(pnl, "TOTAL:", _lblTotal, r++);
         AddTotalInput(pnl, "TENDER $:", _txtTender, r++);
         AddTotalRow(pnl, "CHANGE:", _lblChange, r++);
@@ -351,7 +360,11 @@ public class POSForm : Form
         _dgvProducts.Rows.Clear();
         foreach (var p in filtered)
         {
-            int idx = _dgvProducts.Rows.Add(p.SKU, p.Name, CurrencyFormatter.Format(p.Price), p.QuantityOnHand);
+            decimal? salePrice = _svc.GetSalePrice(p);
+            string priceDisplay = salePrice.HasValue
+                ? $"SALE:{CurrencyFormatter.Format(salePrice.Value)}"
+                : CurrencyFormatter.Format(p.Price);
+            int idx = _dgvProducts.Rows.Add(p.SKU, p.Name, priceDisplay, p.QuantityOnHand);
             var row = _dgvProducts.Rows[idx];
             row.Tag = p;
             if (p.QuantityOnHand == 0)
@@ -359,9 +372,13 @@ public class POSForm : Form
                 row.DefaultCellStyle.ForeColor = CyberpunkTheme.DangerRed;
                 row.DefaultCellStyle.BackColor = Color.FromArgb(30, 10, 10);
             }
-            else if (p.QuantityOnHand <= p.ReorderPoint)
+            else if (salePrice.HasValue)
             {
                 row.DefaultCellStyle.ForeColor = CyberpunkTheme.NeonOrange;
+            }
+            else if (p.QuantityOnHand <= p.ReorderPoint)
+            {
+                row.DefaultCellStyle.ForeColor = CyberpunkTheme.NeonYellow;
             }
         }
     }
@@ -388,7 +405,8 @@ public class POSForm : Form
         }
         else
         {
-            _cart.Add(new CartLine(p, 1, p.Price));
+            decimal effectivePrice = _svc.GetSalePrice(p) ?? p.Price;
+            _cart.Add(new CartLine(p, 1, effectivePrice, p.Price));
         }
         RefreshCartGrid();
     }
@@ -397,11 +415,16 @@ public class POSForm : Form
     {
         _dgvCart.Rows.Clear();
         foreach (var line in _cart)
-            _dgvCart.Rows.Add(
-                line.Product.Name,
+        {
+            string itemName = line.IsOnSale ? $"[SALE] {line.Product.Name}" : line.Product.Name;
+            int idx = _dgvCart.Rows.Add(
+                itemName,
                 line.Qty.ToString(),
                 CurrencyFormatter.Format(line.UnitPrice),
                 CurrencyFormatter.Format(line.LineTotal));
+            if (line.IsOnSale)
+                _dgvCart.Rows[idx].DefaultCellStyle.ForeColor = CyberpunkTheme.NeonOrange;
+        }
         RecalcTotals();
     }
 
@@ -463,11 +486,20 @@ public class POSForm : Form
     {
         decimal subtotal = _cart.Sum(c => c.LineTotal);
         decimal discPct = decimal.TryParse(_txtDiscount.Text, out decimal d) ? Math.Clamp(d, 0, 100) : 0;
-        decimal total = subtotal * (1 - discPct / 100);
+        decimal discounted = subtotal * (1 - discPct / 100);
+
+        var cfg = AppSettingsService.Instance.Current;
+        decimal totalTaxPct = cfg.StateTaxRate + cfg.CountyTaxRate + cfg.CityTaxRate;
+        decimal tax = Math.Round(discounted * totalTaxPct / 100m, 2);
+        decimal total = discounted + tax;
+
         decimal tender = decimal.TryParse(_txtTender.Text, out decimal t) ? t : 0;
         decimal change = tender - total;
 
         _lblSubtotal.Text = CurrencyFormatter.Format(subtotal);
+        _lblTax.Text = totalTaxPct > 0
+            ? $"{CurrencyFormatter.Format(tax)} ({totalTaxPct:F2}%)"
+            : "$0.00";
         _lblTotal.Text = CurrencyFormatter.Format(total);
         _lblChange.Text = change >= 0
             ? CurrencyFormatter.Format(change)
@@ -499,7 +531,11 @@ public class POSForm : Form
         }
 
         decimal discPct = decimal.TryParse(_txtDiscount.Text, out decimal d) ? Math.Clamp(d, 0, 100) : 0;
-        decimal total = _cart.Sum(c => c.LineTotal) * (1 - discPct / 100);
+        decimal discounted = _cart.Sum(c => c.LineTotal) * (1 - discPct / 100);
+        var cfg = AppSettingsService.Instance.Current;
+        decimal totalTaxPct = cfg.StateTaxRate + cfg.CountyTaxRate + cfg.CityTaxRate;
+        decimal tax = Math.Round(discounted * totalTaxPct / 100m, 2);
+        decimal total = discounted + tax;
 
         var confirm = MessageBox.Show(
             $"Process sale of {_cart.Sum(c => c.Qty)} item(s)\nTotal: {CurrencyFormatter.Format(total)}",
@@ -526,11 +562,13 @@ public class POSForm : Form
             var name = line.Product.Name.Length > 24
                 ? line.Product.Name[..21] + "..."
                 : line.Product.Name.PadRight(24);
-            receipt.AppendLine($"{name}  x{line.Qty}  {CurrencyFormatter.Format(line.LineTotal)}");
+            string saleTag = line.IsOnSale ? " *SALE*" : "";
+            receipt.AppendLine($"{name}  x{line.Qty}  {CurrencyFormatter.Format(line.LineTotal)}{saleTag}");
         }
 
         receipt.AppendLine(new string('\u2500', 44));
         if (discPct > 0) receipt.AppendLine($"Discount:  {discPct:F1}%");
+        if (totalTaxPct > 0) receipt.AppendLine($"Tax ({totalTaxPct:F2}%): {CurrencyFormatter.Format(tax)}");
         receipt.AppendLine($"TOTAL:     {CurrencyFormatter.Format(total)}");
         decimal tender = decimal.TryParse(_txtTender.Text, out decimal t) ? t : 0;
         if (tender > 0)
