@@ -17,6 +17,8 @@ public class ProductListForm : Form
     {
         _svc = svc;
         BuildUI();
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            CyberpunkTheme.ApplyBorderlessMode(this, Text);
         RefreshGrid();
     }
 

@@ -129,4 +129,96 @@ public static class CyberpunkTheme
             Margin = new Padding(0, 4, 0, 4)
         };
     }
+
+    // ── Borderless window support ────────────────────────────────────────
+
+    public static CustomTitleBar ApplyBorderlessMode(Form form, string title, bool hasMaximize = true)
+    {
+        form.SuspendLayout();
+        form.FormBorderStyle = FormBorderStyle.None;
+
+        // Push root content down by padding rather than relying on Dock sibling ordering,
+        // which is unreliable when the form is already shown.
+        var rootFill = form.Controls.Cast<Control>().FirstOrDefault(c => c.Dock == DockStyle.Fill);
+        if (rootFill != null)
+            rootFill.Padding = new Padding(rootFill.Padding.Left,
+                                           rootFill.Padding.Top + BarHeight,
+                                           rootFill.Padding.Right,
+                                           rootFill.Padding.Bottom);
+
+        var bar = new CustomTitleBar(form, title, hasMaximize)
+        {
+            Size = new Size(form.ClientSize.Width, BarHeight)
+        };
+        form.Controls.Add(bar);
+        bar.BringToFront();
+        form.ResumeLayout(true);
+
+        if (hasMaximize)
+            EnableBorderlessResize(form);
+        return bar;
+    }
+
+    public static void RemoveBorderlessMode(Form form, CustomTitleBar bar, FormBorderStyle restoreStyle)
+    {
+        form.SuspendLayout();
+        form.Controls.Remove(bar);
+        bar.Dispose();
+
+        var rootFill = form.Controls.Cast<Control>().FirstOrDefault(c => c.Dock == DockStyle.Fill);
+        if (rootFill != null)
+            rootFill.Padding = new Padding(rootFill.Padding.Left,
+                                           Math.Max(0, rootFill.Padding.Top - BarHeight),
+                                           rootFill.Padding.Right,
+                                           rootFill.Padding.Bottom);
+
+        form.FormBorderStyle = restoreStyle;
+        form.ResumeLayout(true);
+    }
+
+    private const int BarHeight = 32;
+
+    public static void EnableBorderlessResize(Form form, int gripSize = 6)
+    {
+        var helper = new BorderlessResizeHelper(form, gripSize);
+        if (form.IsHandleCreated)
+            helper.AssignHandle(form.Handle);
+    }
+}
+
+internal sealed class BorderlessResizeHelper : NativeWindow
+{
+    private readonly Form _form;
+    private readonly int _grip;
+
+    public BorderlessResizeHelper(Form form, int grip)
+    {
+        _form = form;
+        _grip = grip;
+        form.HandleCreated   += (_, _) => AssignHandle(form.Handle);
+        form.HandleDestroyed += (_, _) => ReleaseHandle();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        const int WM_NCHITTEST = 0x0084;
+        if (m.Msg == WM_NCHITTEST && _form.WindowState == FormWindowState.Normal)
+        {
+            int lp = m.LParam.ToInt32();
+            var pt = _form.PointToClient(new Point(lp & 0xFFFF, (lp >> 16) & 0xFFFF));
+            int w = _form.ClientSize.Width, h = _form.ClientSize.Height;
+            bool l = pt.X < _grip, r = pt.X > w - _grip;
+            bool t = pt.Y < _grip, b = pt.Y > h - _grip;
+
+            if      (t && l) { m.Result = (IntPtr)13; return; } // HTTOPLEFT
+            else if (t && r) { m.Result = (IntPtr)14; return; } // HTTOPRIGHT
+            else if (b && l) { m.Result = (IntPtr)16; return; } // HTBOTTOMLEFT
+            else if (b && r) { m.Result = (IntPtr)17; return; } // HTBOTTOMRIGHT
+            else if (t)      { m.Result = (IntPtr)12; return; } // HTTOP
+            else if (b)      { m.Result = (IntPtr)15; return; } // HTBOTTOM
+            else if (l)      { m.Result = (IntPtr)10; return; } // HTLEFT
+            else if (r)      { m.Result = (IntPtr)11; return; } // HTRIGHT
+        }
+        base.WndProc(ref m);
+    }
 }

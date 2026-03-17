@@ -34,6 +34,8 @@ public class ProductForm : Form
             : new Product();
 
         BuildUI(existing != null);
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            CyberpunkTheme.ApplyBorderlessMode(this, Text, hasMaximize: false);
     }
 
     private void BuildUI(bool isEdit)

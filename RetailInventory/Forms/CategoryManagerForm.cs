@@ -13,6 +13,8 @@ public class CategoryManagerForm : Form
     {
         _svc = svc;
         BuildUI();
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            CyberpunkTheme.ApplyBorderlessMode(this, Text);
         RefreshList();
     }
 

@@ -1,5 +1,6 @@
 using RetailInventory.Helpers;
 using RetailInventory.Models;
+using RetailInventory.Services;
 
 namespace RetailInventory.Forms;
 
@@ -17,6 +18,8 @@ public class CategoryForm : Form
             : new Category();
 
         BuildUI(existing != null);
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            CyberpunkTheme.ApplyBorderlessMode(this, Text, hasMaximize: false);
     }
 
     private void BuildUI(bool isEdit)

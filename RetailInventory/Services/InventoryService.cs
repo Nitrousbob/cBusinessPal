@@ -81,5 +81,8 @@ public class InventoryService
     public List<StockTransaction> GetTransactionsForProduct(Guid productId) =>
         _data.Transactions.Where(t => t.ProductId == productId).OrderByDescending(t => t.Timestamp).ToList();
 
+    public void ForceSave() => _persistence.Save(_data);
     private void Save() => _persistence.Save(_data);
+
+    public void Reload() => _data = _persistence.Load();
 }

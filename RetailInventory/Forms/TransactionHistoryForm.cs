@@ -15,6 +15,8 @@ public class TransactionHistoryForm : Form
         _svc = svc;
         _filterProduct = filterProduct;
         BuildUI();
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            CyberpunkTheme.ApplyBorderlessMode(this, Text);
         LoadData();
     }
 

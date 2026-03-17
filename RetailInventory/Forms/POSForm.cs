@@ -36,6 +36,8 @@ public class POSForm : Form
     {
         _svc = svc;
         BuildUI();
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            CyberpunkTheme.ApplyBorderlessMode(this, Text);
         FilterProducts();
         _ticker.Interval = 1000;
         _ticker.Tick += (_, _) => UpdateStatusBar();

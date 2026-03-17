@@ -13,11 +13,18 @@ public class MainForm : Form
     private Label _lblTxCount = new();
     private Label _lblLastSaved = new();
     private Panel _glowBar = new();
+    private Panel _statusBar = new();
+    private CustomTitleBar? _titleBar;
+    private Button _btnSettings = new();
 
     public MainForm()
     {
         BuildUI();
         RefreshStats();
+        if (AppSettingsService.Instance.Current.BorderlessMode)
+            AttachCustomTitleBar();
+        else
+            ShowStandardModeSettingsButton();
         var ticker = new System.Windows.Forms.Timer { Interval = 2000 };
         ticker.Tick += (_, _) => AnimateGlow();
         ticker.Start();
@@ -90,9 +97,9 @@ public class MainForm : Form
         };
         navPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         navPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        navPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
-        navPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
-        navPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+        navPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
+        navPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
+        navPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
 
         navPanel.Controls.Add(CreateNavButton("[ PRODUCTS ]", "Manage product catalog and inventory levels",
             CyberpunkTheme.NeonCyan, OnProducts), 0, 0);
@@ -113,12 +120,12 @@ public class MainForm : Form
         root.Controls.Add(content, 0, 2);
 
         // Status bar
-        var statusBar = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(8, 8, 18) };
+        _statusBar = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(8, 8, 18) };
         _lblLastSaved.ForeColor = CyberpunkTheme.TextSecondary;
         _lblLastSaved.Font = CyberpunkTheme.FontSmall;
         _lblLastSaved.Location = new Point(12, 6);
         _lblLastSaved.AutoSize = true;
-        statusBar.Controls.Add(_lblLastSaved);
+        _statusBar.Controls.Add(_lblLastSaved);
 
         var lblPowered = new Label
         {
@@ -129,8 +136,8 @@ public class MainForm : Form
             Anchor = AnchorStyles.Right | AnchorStyles.Top
         };
         lblPowered.Location = new Point(600, 6);
-        statusBar.Controls.Add(lblPowered);
-        root.Controls.Add(statusBar, 0, 3);
+        _statusBar.Controls.Add(lblPowered);
+        root.Controls.Add(_statusBar, 0, 3);
 
         Controls.Add(root);
     }
@@ -238,8 +245,8 @@ public class MainForm : Form
             Font = CyberpunkTheme.FontSmall,
             AutoSize = false,
             Width = 380,
-            Height = 30,
-            Location = new Point(12, 38),
+            Height = 38,
+            Location = new Point(12, 30),
             BackColor = Color.Transparent
         };
 
@@ -305,5 +312,92 @@ public class MainForm : Form
         using var form = new POSForm(_svc);
         form.ShowDialog(this);
         RefreshStats();
+    }
+
+    private void AttachCustomTitleBar()
+    {
+        // Pass empty title — DrawHeader already paints the large title; no duplication needed
+        _titleBar = CyberpunkTheme.ApplyBorderlessMode(this, "");
+        _titleBar.SettingsClicked += (_, e) => ShowHamburgerMenu(_titleBar, e);
+        _btnSettings.Visible = false;
+    }
+
+    private void ShowStandardModeSettingsButton()
+    {
+        _btnSettings.Text = "\u2261"; // ≡ hamburger
+        _btnSettings.Size = new Size(28, 20);
+        _btnSettings.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+        CyberpunkTheme.StyleButton(_btnSettings, CyberpunkTheme.NeonYellow);
+        _btnSettings.Click -= OnHamburgerClick;
+        _btnSettings.Click += OnHamburgerClick;
+        if (!_statusBar.Controls.Contains(_btnSettings))
+            _statusBar.Controls.Add(_btnSettings);
+        _btnSettings.Location = new Point(_statusBar.Width - 32, 4);
+        _btnSettings.Visible = true;
+    }
+
+    private void OnHamburgerClick(object? sender, EventArgs e) =>
+        ShowHamburgerMenu(sender as Control, e);
+
+    private void ShowHamburgerMenu(Control? anchor, EventArgs e)
+    {
+        var menu = new ContextMenuStrip();
+        menu.BackColor = CyberpunkTheme.Surface;
+        menu.ForeColor = CyberpunkTheme.TextPrimary;
+        menu.Font = CyberpunkTheme.FontBody;
+        menu.RenderMode = ToolStripRenderMode.System;
+
+        var itemSave = new ToolStripMenuItem("[ SAVE DATA ]") { ForeColor = CyberpunkTheme.NeonCyan };
+        itemSave.Click += (_, _) =>
+        {
+            _svc.ForceSave();
+            _lblLastSaved.Text = $"SAVED: {DateTime.Now:HH:mm:ss}";
+        };
+
+        var itemLoad = new ToolStripMenuItem("[ LOAD DATA ]") { ForeColor = CyberpunkTheme.NeonCyan };
+        itemLoad.Click += (_, _) =>
+        {
+            _svc.Reload();
+            RefreshStats();
+            _lblLastSaved.Text = $"LOADED: {DateTime.Now:HH:mm:ss}";
+        };
+
+        bool borderless = AppSettingsService.Instance.Current.BorderlessMode;
+        var itemToggle = new ToolStripMenuItem(borderless ? "[ BORDERED MODE ]" : "[ BORDERLESS MODE ]")
+        {
+            ForeColor = CyberpunkTheme.NeonYellow
+        };
+        itemToggle.Click += OnToggleBorderless;
+
+        menu.Items.Add(itemSave);
+        menu.Items.Add(itemLoad);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(itemToggle);
+
+        if (anchor != null)
+            menu.Show(anchor, new Point(0, anchor.Height));
+        else
+            menu.Show(Cursor.Position);
+    }
+
+    private void OnToggleBorderless(object? sender, EventArgs e)
+    {
+        bool newMode = !AppSettingsService.Instance.Current.BorderlessMode;
+        AppSettingsService.Instance.Current.BorderlessMode = newMode;
+        AppSettingsService.Instance.Save();
+
+        if (newMode)
+        {
+            AttachCustomTitleBar();
+        }
+        else
+        {
+            if (_titleBar != null)
+            {
+                CyberpunkTheme.RemoveBorderlessMode(this, _titleBar, FormBorderStyle.Sizable);
+                _titleBar = null;
+            }
+            ShowStandardModeSettingsButton();
+        }
     }
 }
