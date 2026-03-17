@@ -1,0 +1,17 @@
+# Claude Code
+CLAUDE.md
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# NuGet
+*.nupkg
+packages/
+
+# OS
+.DS_Store
+Thumbs.db
